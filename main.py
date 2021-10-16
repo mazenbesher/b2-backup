@@ -4,9 +4,9 @@ import sys
 from pathlib import Path
 from typing import Iterable, Union, Dict
 
+import typer
 from dotenv import dotenv_values
 from gitignore_parser import parse_gitignore
-import typer
 from b2sdk.v2 import InMemoryAccountInfo
 from b2sdk.v2 import B2Api
 from b2sdk.v2 import ScanPoliciesManager
@@ -20,8 +20,11 @@ required_config_keys = [
     'SRC_DIR', 'DST_BUCKET_NAME',
     'APP_KEY_ID', 'APP_KEY',
 ]
-ExcludedFiles = Iterable[Union[str, re.Pattern]]
 app = typer.Typer()
+ExcludedFiles = Iterable[Union[str, re.Pattern]]
+global_ignores_regex = [
+    re.compile(r) for r in Path('global-ignores-regex').read_text().split()
+]
 
 
 def check_config(config: Dict):
@@ -39,9 +42,16 @@ def path_to_regex(path: Path) -> str:
     return path.as_posix().replace('/', '\/').replace('.', '\.')
 
 
+def access(path: Path) -> bool:
+    try:
+        path.is_dir()
+    except OSError:
+        return False
+    return True
+
+
 def get_execluded_files(config: Dict, verbose: bool = False) -> ExcludedFiles:
     src_path: Path = Path(config['SRC_DIR'])
-    excluded_files: ExcludedFiles = []
 
     def inner_iterator(curr_dir: Path = src_path):
         paths_in_curr_dir = list(curr_dir.iterdir())
@@ -49,21 +59,23 @@ def get_execluded_files(config: Dict, verbose: bool = False) -> ExcludedFiles:
 
         has_gitignore = possible_gitignore_path in paths_in_curr_dir
         if has_gitignore:
-            # if verbose: print(f'{curr_dir} has a .gitignore')
             matches = parse_gitignore(possible_gitignore_path)
 
         for path in paths_in_curr_dir:
-            if has_gitignore and matches(path):
+            if not access(path):
+                print(f"Can't access {path}")
+                continue
+            global_match: bool = any(c.match(str(path)) is not None for c in global_ignores_regex)
+            if global_match or (has_gitignore and matches(path)):
                 if verbose:
                     print(f'excluding {path}')
                 # remove first part of the path as it is the source
                 path = path.relative_to(src_path)
-                excluded_files.append(path_to_regex(path))
+                yield path_to_regex(path)
             elif path.is_dir():
-                inner_iterator(path)
+                yield from inner_iterator(path)
 
-    inner_iterator()
-    return excluded_files
+    yield from inner_iterator()
 
 
 def b2_sync(config: Dict, verbose: bool = False, dry_run: bool = False):
@@ -118,11 +130,14 @@ def sync(
 ):
     config = dotenv_values(".env")
     check_config(config)
-    b2_sync(config, verbose, dry_run)
+    # b2_sync(config, verbose, dry_run)
+    print(list(get_execluded_files(config, verbose)))
 
 
 @app.command()
-def compute_backup_size():
+def compute_backup_size(
+    show_files: bool = typer.Option(False),
+):
     size: int = 0
     config = dotenv_values(".env")
     src_path: Path = Path(config['SRC_DIR'])
@@ -134,15 +149,20 @@ def compute_backup_size():
 
         has_gitignore = possible_gitignore_path in paths_in_curr_dir
         if has_gitignore:
-            # if verbose: print(f'{curr_dir} has a .gitignore')
             matches = parse_gitignore(possible_gitignore_path)
 
         for path in paths_in_curr_dir:
-            if has_gitignore and matches(path):
+            if not access(path):
+                print(f"Can't access {path}")
+                continue
+            global_match: bool = any(c.match(str(path)) is not None for c in global_ignores_regex)
+            if global_match or (has_gitignore and matches(path)):
                 continue
             elif path.is_dir():
                 inner_iterator(path)
             else:
+                if show_files:
+                    print(path)
                 size += path.stat().st_size
 
     inner_iterator()
