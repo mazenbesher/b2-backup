@@ -1,0 +1,4 @@
+b2sdk
+gitignore_parser
+python-dotenv
+typer
