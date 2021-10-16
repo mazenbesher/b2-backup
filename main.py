@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Iterable, Union, Dict
 
 import typer
-from dotenv import dotenv_values
+import yaml
 from gitignore_parser import parse_gitignore
 from b2sdk.v2 import InMemoryAccountInfo
 from b2sdk.v2 import B2Api
@@ -16,26 +16,39 @@ from b2sdk.v2 import Synchronizer
 from b2sdk.v2 import KeepOrDeleteMode, CompareVersionMode, NewerFileSyncMode
 
 
-required_config_keys = [
-    'SRC_DIR', 'DST_BUCKET_NAME',
-    'APP_KEY_ID', 'APP_KEY',
-]
-app = typer.Typer()
-ExcludedFiles = Iterable[Union[str, re.Pattern]]
-global_ignores_regex = [
-    re.compile(r) for r in Path('global-ignores-regex').read_text().split()
-]
+config: Dict = None
 
 
-def check_config(config: Dict):
+def check_config():
     # assert all keys are passed
+    required_config_keys = [
+        'src_dir', 'dst_bucket_name',
+        'app_key_id', 'app_key',
+    ]
     for key in required_config_keys:
         if not key in config:
-            raise ValueError(f'{key} in .env is required')
+            raise ValueError(f'{key} in config is required')
 
-    src_path: Path = Path(config['SRC_DIR'])
+    src_path: Path = Path(config['src_dir'])
     if not src_path.exists():
         raise ValueError(f'src path {src_path} does not exist!')
+
+
+def load_config():
+    global config
+    if not Path('config.yaml').exists():
+        raise ValueError('No config file!')
+    config = yaml.safe_load(Path('config.yaml').read_text())
+    check_config()
+
+
+load_config()
+app = typer.Typer()
+ExcludedFiles = Iterable[Union[str, re.Pattern]]
+
+global_ignores_regex = []
+if 'global_ignores' in config:
+    global_ignores_regex = [re.compile(r) for r in config['global_ignores']]
 
 
 def path_to_regex(path: Path) -> str:
@@ -50,8 +63,8 @@ def access(path: Path) -> bool:
     return True
 
 
-def get_execluded_files(config: Dict, verbose: bool = False) -> ExcludedFiles:
-    src_path: Path = Path(config['SRC_DIR'])
+def get_execluded_files(verbose: bool = False) -> ExcludedFiles:
+    src_path: Path = Path(config['src_dir'])
 
     def inner_iterator(curr_dir: Path = src_path):
         paths_in_curr_dir = list(curr_dir.iterdir())
@@ -65,7 +78,7 @@ def get_execluded_files(config: Dict, verbose: bool = False) -> ExcludedFiles:
             if not access(path):
                 print(f"Can't access {path}")
                 continue
-            global_match: bool = any(c.match(str(path)) is not None for c in global_ignores_regex)
+            global_match: bool = any(c.match(path.as_posix()) is not None for c in global_ignores_regex)
             if global_match or (has_gitignore and matches(path)):
                 if verbose:
                     print(f'excluding {path}')
@@ -78,18 +91,22 @@ def get_execluded_files(config: Dict, verbose: bool = False) -> ExcludedFiles:
     yield from inner_iterator()
 
 
-def b2_sync(config: Dict, verbose: bool = False, dry_run: bool = False):
+@app.command()
+def sync(
+    verbose: bool = typer.Option(False),
+    dry_run: bool = typer.Option(False),
+):
     info = InMemoryAccountInfo()
     b2_api = B2Api(info)
     b2_api.authorize_account(
         "production",
-        config['APP_KEY_ID'],
-        config['APP_KEY'],
+        config['app_key_id'],
+        config['app_key'],
     )
 
     policies_manager = ScanPoliciesManager(
         exclude_all_symlinks=True,
-        exclude_file_regexes=get_execluded_files(config, verbose),
+        exclude_file_regexes=get_execluded_files(verbose),
     )
 
     synchronizer = Synchronizer(
@@ -104,8 +121,8 @@ def b2_sync(config: Dict, verbose: bool = False, dry_run: bool = False):
         keep_days=10,
     )
 
-    src_path: Path = Path(config['SRC_DIR'])
-    dst_bucket_name: str = config['DST_BUCKET_NAME']
+    src_path: Path = Path(config['src_dir'])
+    dst_bucket_name: str = config['dst_bucket_name']
 
     no_progress = True
     with SyncReport(sys.stdout, no_progress) as reporter:
@@ -119,28 +136,16 @@ def b2_sync(config: Dict, verbose: bool = False, dry_run: bool = False):
 
 @app.command()
 def show_excluded_files():
-    config = dotenv_values(".env")
-    get_execluded_files(config, verbose=True)
-
-
-@app.command()
-def sync(
-    verbose: bool = typer.Option(False),
-    dry_run: bool = typer.Option(False),
-):
-    config = dotenv_values(".env")
-    check_config(config)
-    # b2_sync(config, verbose, dry_run)
-    print(list(get_execluded_files(config, verbose)))
+    get_execluded_files(verbose=True)
 
 
 @app.command()
 def compute_backup_size(
     show_files: bool = typer.Option(False),
+    show_largest_files: int = typer.Option(0),  # TODO
 ):
     size: int = 0
-    config = dotenv_values(".env")
-    src_path: Path = Path(config['SRC_DIR'])
+    src_path: Path = Path(config['src_dir'])
 
     def inner_iterator(curr_dir: Path = src_path):
         nonlocal size
@@ -155,7 +160,7 @@ def compute_backup_size(
             if not access(path):
                 print(f"Can't access {path}")
                 continue
-            global_match: bool = any(c.match(str(path)) is not None for c in global_ignores_regex)
+            global_match: bool = any(c.match(path.as_posix()) is not None for c in global_ignores_regex)
             if global_match or (has_gitignore and matches(path)):
                 continue
             elif path.is_dir():
@@ -166,10 +171,10 @@ def compute_backup_size(
                 size += path.stat().st_size
 
     inner_iterator()
-    print(f'{size:>12,} Bytes')
-    print(f'{round(size / 1e3):>12,} KB')
-    print(f'{round(size / 1e6):>12,} MB')
-    print(f'{round(size / 1e9):>12,} GB')
+    print(f'{size:>20,} Bytes')
+    print(f'{round(size / 1e3):>20,} KB')
+    print(f'{round(size / 1e6):>20,} MB')
+    print(f'{round(size / 1e9):>20,} GB')
 
 
 if __name__ == "__main__":

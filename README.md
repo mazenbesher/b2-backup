@@ -1,13 +1,25 @@
-# Sample `.env` file
+# `config.yaml`
 
-```env
-# sync
-SRC_DIR='./src'
-DST_BUCKET_NAME='bucket-name'
+## Required arguments
+
+```yaml
+# sync options
+src_dir: './playground/src'
+dst_bucket_name: "test-bucket"
 
 # b2 app key
-APP_KEY_ID = '4a5b6c7d8e9f'
-APP_KEY = '001b8e23c26ff6efb941e237deb182b9599a84bef7'
+app_key_id: "4a5b6c7d8e9f"
+app_key: "001b8e23c26ff6efb941e237deb182b9599a84bef7"
+```
+
+## Optional arguments
+
+### Global patterns
+
+```yaml
+# global ignores
+global_ignores:
+  - ".*node_modules.*"
 ```
 
 # Getting started
@@ -16,7 +28,7 @@ APP_KEY = '001b8e23c26ff6efb941e237deb182b9599a84bef7'
 2. `source ./venv/bin/activate`
 3. `pip install -r requirements.txt`
 4. `vim .env`
-5. `python main --dry-run --verbose`
+5. `python main.py sync --dry-run --verbose`
 
 # TODO
 
