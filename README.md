@@ -10,11 +10,13 @@ APP_KEY_ID = '4a5b6c7d8e9f'
 APP_KEY = '001b8e23c26ff6efb941e237deb182b9599a84bef7'
 ```
 
-# Usage
+# Getting started
 
-```bash
-python main --dry-run --verbose
-```
+1. `python -m venv ./venv`
+2. `source ./venv/bin/activate`
+3. `pip install -r requirements.txt`
+4. `vim .env`
+5. `python main --dry-run --verbose`
 
 # TODO
 

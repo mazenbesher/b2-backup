@@ -53,17 +53,14 @@ def get_execluded_files(config: Dict, verbose: bool = False) -> ExcludedFiles:
             matches = parse_gitignore(possible_gitignore_path)
 
         for path in paths_in_curr_dir:
-            if path.is_dir():
+            if has_gitignore and matches(path):
+                if verbose:
+                    print(f'excluding {path}')
+                # remove first part of the path as it is the source
+                path = path.relative_to(src_path)
+                excluded_files.append(path_to_regex(path))
+            elif path.is_dir():
                 inner_iterator(path)
-            elif path.is_file():
-                if has_gitignore and matches(path):
-                    if verbose:
-                        print(f'excluding {path}')
-                    # remove first part of the path as it is the source
-                    path = path.relative_to(src_path)
-                    excluded_files.append(path_to_regex(path))
-            else:
-                raise ValueError(f'{path} is neither file nor dir! not sure how to proceed!')
 
     inner_iterator()
     return excluded_files
@@ -106,6 +103,13 @@ def b2_sync(config: Dict, verbose: bool = False, dry_run: bool = False):
             now_millis=int(round(time.time() * 1000)),
             reporter=reporter,
         )
+
+
+@app.command()
+def show_excluded_files():
+    config = dotenv_values(".env")
+    get_execluded_files(config, verbose=True)
+
 
 @app.command()
 def sync(
