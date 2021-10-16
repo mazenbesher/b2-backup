@@ -121,5 +121,36 @@ def sync(
     b2_sync(config, verbose, dry_run)
 
 
+@app.command()
+def compute_backup_size():
+    size: int = 0
+    config = dotenv_values(".env")
+    src_path: Path = Path(config['SRC_DIR'])
+
+    def inner_iterator(curr_dir: Path = src_path):
+        nonlocal size
+        paths_in_curr_dir = list(curr_dir.iterdir())
+        possible_gitignore_path = curr_dir / '.gitignore'
+
+        has_gitignore = possible_gitignore_path in paths_in_curr_dir
+        if has_gitignore:
+            # if verbose: print(f'{curr_dir} has a .gitignore')
+            matches = parse_gitignore(possible_gitignore_path)
+
+        for path in paths_in_curr_dir:
+            if has_gitignore and matches(path):
+                continue
+            elif path.is_dir():
+                inner_iterator(path)
+            else:
+                size += path.stat().st_size
+
+    inner_iterator()
+    print(f'{size:>12,} Bytes')
+    print(f'{round(size / 1e3):>12,} KB')
+    print(f'{round(size / 1e6):>12,} MB')
+    print(f'{round(size / 1e9):>12,} GB')
+
+
 if __name__ == "__main__":
     app()
