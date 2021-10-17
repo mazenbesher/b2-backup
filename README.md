@@ -1,3 +1,5 @@
+Backup all files in a given directory to a backblaze b2 bucket while respeciting gitignore rules.
+
 # `config.yaml`
 
 ## Required arguments
@@ -27,9 +29,10 @@ global_ignores:
 1. `python -m venv ./venv`
 2. `source ./venv/bin/activate`
 3. `pip install -r requirements.txt`
-4. `vim .env`
+4. `vim config.yaml`
 5. `python main.py sync --dry-run --verbose`
 
 # TODO
 
 - [ ] unit tests from './playground'
+- [x] respecte nested rules

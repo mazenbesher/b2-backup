@@ -2,7 +2,7 @@ import re
 import time
 import sys
 from pathlib import Path
-from typing import Iterable, Union, Dict
+from typing import Iterable, Set, Union, Dict
 
 import typer
 import yaml
@@ -66,27 +66,34 @@ def access(path: Path) -> bool:
 def get_execluded_files(verbose: bool = False) -> ExcludedFiles:
     src_path: Path = Path(config['src_dir'])
 
-    def inner_iterator(curr_dir: Path = src_path):
+    def inner_iterator(
+            curr_dir: Path = src_path, 
+            parents_with_gitignores: Set = frozenset([]),
+        ):
         paths_in_curr_dir = list(curr_dir.iterdir())
-        possible_gitignore_path = curr_dir / '.gitignore'
+        new_parents_with_gitignores = list(parents_with_gitignores)
+        if (curr_dir / '.gitignore') in paths_in_curr_dir:
+            new_parents_with_gitignores += [curr_dir]
 
-        has_gitignore = possible_gitignore_path in paths_in_curr_dir
-        if has_gitignore:
-            matches = parse_gitignore(possible_gitignore_path)
+        def matches(path):
+            for par in new_parents_with_gitignores:
+                if parse_gitignore(par / '.gitignore')(path):
+                    return True
+            return False
 
         for path in paths_in_curr_dir:
             if not access(path):
                 print(f"Can't access {path}")
                 continue
             global_match: bool = any(c.match(path.as_posix()) is not None for c in global_ignores_regex)
-            if global_match or (has_gitignore and matches(path)):
+            if global_match or matches(path):
                 if verbose:
                     print(f'excluding {path}')
                 # remove first part of the path as it is the source
                 path = path.relative_to(src_path)
                 yield path_to_regex(path)
             elif path.is_dir():
-                yield from inner_iterator(path)
+                yield from inner_iterator(path, frozenset(new_parents_with_gitignores))
 
     yield from inner_iterator()
 
@@ -136,7 +143,7 @@ def sync(
 
 @app.command()
 def show_excluded_files():
-    get_execluded_files(verbose=True)
+    list(get_execluded_files(verbose=True))
 
 
 @app.command()
@@ -147,24 +154,32 @@ def compute_backup_size(
     size: int = 0
     src_path: Path = Path(config['src_dir'])
 
-    def inner_iterator(curr_dir: Path = src_path):
+    def inner_iterator(
+            curr_dir: Path = src_path, 
+            parents_with_gitignores: Set = frozenset([]),
+        ):
         nonlocal size
-        paths_in_curr_dir = list(curr_dir.iterdir())
-        possible_gitignore_path = curr_dir / '.gitignore'
 
-        has_gitignore = possible_gitignore_path in paths_in_curr_dir
-        if has_gitignore:
-            matches = parse_gitignore(possible_gitignore_path)
+        paths_in_curr_dir = list(curr_dir.iterdir())
+        new_parents_with_gitignores = list(parents_with_gitignores)
+        if (curr_dir / '.gitignore') in paths_in_curr_dir:
+            new_parents_with_gitignores += [curr_dir]
+
+        def matches(path):
+            for par in new_parents_with_gitignores:
+                if parse_gitignore(par / '.gitignore')(path):
+                    return True
+            return False
 
         for path in paths_in_curr_dir:
             if not access(path):
                 print(f"Can't access {path}")
                 continue
             global_match: bool = any(c.match(path.as_posix()) is not None for c in global_ignores_regex)
-            if global_match or (has_gitignore and matches(path)):
+            if global_match or matches(path):
                 continue
             elif path.is_dir():
-                inner_iterator(path)
+                inner_iterator(path, frozenset(new_parents_with_gitignores))
             else:
                 if show_files:
                     print(path)
