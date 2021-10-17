@@ -2,3 +2,4 @@ b2sdk
 gitignore_parser
 typer
 pyyaml
+sortedcontainers

@@ -2,11 +2,13 @@ import re
 import time
 import sys
 from pathlib import Path
-from typing import FrozenSet, Iterable, Union, Dict
+from dataclasses import dataclass
+from typing import FrozenSet, Iterable, Iterator, Union, Dict
 
 import typer
 import yaml
 from gitignore_parser import parse_gitignore
+from sortedcontainers import SortedDict
 from b2sdk.v2 import InMemoryAccountInfo
 from b2sdk.v2 import B2Api
 from b2sdk.v2 import ScanPoliciesManager
@@ -63,13 +65,17 @@ def access(path: Path) -> bool:
     return True
 
 
-def get_execluded_files(verbose: bool = False) -> ExcludedFiles:
-    src_path: Path = Path(config['src_dir'])
+@dataclass
+class File:
+    path: Path
+    excluded: bool
 
+
+def dir_iter(start_dir: Path) -> Iterator[File]:
     def inner_iterator(
-            curr_dir: Path = src_path, 
-            parents_with_gitignores: FrozenSet = frozenset([]),
-        ):
+        curr_dir: Path = start_dir,
+        parents_with_gitignores: FrozenSet = frozenset([]),
+    ):
         paths_in_curr_dir = list(curr_dir.iterdir())
         new_parents_with_gitignores = list(parents_with_gitignores)
         if (curr_dir / '.gitignore') in paths_in_curr_dir:
@@ -84,18 +90,29 @@ def get_execluded_files(verbose: bool = False) -> ExcludedFiles:
         for path in paths_in_curr_dir:
             if not access(path):
                 print(f"Can't access {path}")
+                yield File(path=path, excluded=True)
                 continue
+
             global_match: bool = any(c.match(path.as_posix()) is not None for c in global_ignores_regex)
             if global_match or matches(path):
-                if verbose:
-                    print(f'excluding {path}')
-                # remove first part of the path as it is the source
-                path = path.relative_to(src_path)
-                yield path_to_regex(path)
+                yield File(path=path, excluded=True)
             elif path.is_dir():
                 yield from inner_iterator(path, frozenset(new_parents_with_gitignores))
+            else:
+                yield File(path=path, excluded=False)
 
     yield from inner_iterator()
+
+
+def get_execluded_files(verbose: bool = False) -> ExcludedFiles:
+    src_path: Path = Path(config['src_dir'])
+    for file in dir_iter(src_path):
+        if file.excluded:
+            if verbose:
+                print(f'excluding {file.path}')
+            # remove first part of the path as it is the source
+            path = file.path.relative_to(src_path)
+            yield path_to_regex(path)
 
 
 @app.command()
@@ -149,47 +166,36 @@ def show_excluded_files():
 @app.command()
 def compute_backup_size(
     show_files: bool = typer.Option(False),
-    show_largest_files: int = typer.Option(0),  # TODO
+    show_largest_files: int = typer.Option(0, help="Number of top largest files to show. 0 to disable."),
 ):
     size: int = 0
     src_path: Path = Path(config['src_dir'])
 
-    def inner_iterator(
-            curr_dir: Path = src_path, 
-            parents_with_gitignores: FrozenSet = frozenset([]),
-        ):
-        nonlocal size
+    if show_largest_files > 0:
+        sizes_dict: SortedDict = SortedDict()  # key: size, value: path as str
 
-        paths_in_curr_dir = list(curr_dir.iterdir())
-        new_parents_with_gitignores = list(parents_with_gitignores)
-        if (curr_dir / '.gitignore') in paths_in_curr_dir:
-            new_parents_with_gitignores += [curr_dir]
+    for file in dir_iter(src_path):
+        if not file.excluded:
+            if show_files:
+                print(file.path)
+            curr_file_size = file.path.stat().st_size
+            size += curr_file_size
 
-        def matches(path):
-            for par in new_parents_with_gitignores:
-                if parse_gitignore(par / '.gitignore')(path):
-                    return True
-            return False
+            if show_largest_files > 0:
+                sizes_dict[curr_file_size] = str(file.path)
+                if len(sizes_dict) > show_largest_files:
+                    sizes_dict.popitem()
 
-        for path in paths_in_curr_dir:
-            if not access(path):
-                print(f"Can't access {path}")
-                continue
-            global_match: bool = any(c.match(path.as_posix()) is not None for c in global_ignores_regex)
-            if global_match or matches(path):
-                continue
-            elif path.is_dir():
-                inner_iterator(path, frozenset(new_parents_with_gitignores))
-            else:
-                if show_files:
-                    print(path)
-                size += path.stat().st_size
-
-    inner_iterator()
     print(f'{size:>20,} Bytes')
     print(f'{round(size / 1e3):>20,} KB')
     print(f'{round(size / 1e6):>20,} MB')
     print(f'{round(size / 1e9):>20,} GB')
+
+    if show_largest_files > 0:
+        pos_pad = len(str(show_largest_files))
+        path_pad = max(map(len, sizes_dict.values()))
+        for i, (size, path) in enumerate(reversed(list(sizes_dict.items()))):
+            print(f'{i+1:>{pos_pad}}. {path:<{path_pad}} {round(size / 1e6):,} MB')
 
 
 if __name__ == "__main__":
