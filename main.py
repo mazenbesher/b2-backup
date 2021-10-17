@@ -71,6 +71,24 @@ class File:
     excluded: bool
 
 
+def is_above_size_limit(path: Path) -> bool:
+    if not 'size_limits' in config:
+        return False
+
+    for pattern, size in config['size_limits'].items():
+        # size e.g.: ">5"
+        if re.compile(pattern).match(path.as_posix()) is not None:
+            if size[:2] == ">=" and path.stat().st_size >= float(size[2:]) * 1e6:
+                return True
+            elif size[:1] == ">" and path.stat().st_size > float(size[1:]) * 1e6:
+                return True
+            elif size[:2] == "<=" and path.stat().st_size <= float(size[2:]) * 1e6:
+                return True
+            elif size[:1] == "<" and path.stat().st_size < float(size[1:]) * 1e6:
+                return True
+    return False
+
+
 def dir_iter(start_dir: Path) -> Iterator[File]:
     def inner_iterator(
         curr_dir: Path = start_dir,
@@ -94,7 +112,7 @@ def dir_iter(start_dir: Path) -> Iterator[File]:
                 continue
 
             global_match: bool = any(c.match(path.as_posix()) is not None for c in global_ignores_regex)
-            if global_match or matches(path):
+            if global_match or is_above_size_limit(path) or matches(path):
                 yield File(path=path, excluded=True)
             elif path.is_dir():
                 yield from inner_iterator(path, frozenset(new_parents_with_gitignores))

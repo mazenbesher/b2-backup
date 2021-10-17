@@ -21,7 +21,19 @@ app_key: "001b8e23c26ff6efb941e237deb182b9599a84bef7"
 ```yaml
 # global ignores
 global_ignores:
-  - ".*node_modules.*"
+  - ".*node_modules$"
+  - ".*\\.git$"
+  - ".*\\.ipynb_checkpoints$"
+```
+
+### Size limits
+
+Exclude any ipython notebook larger than 5MB.
+
+```yaml
+size_limits:
+  # size in MB
+  ".*\\.ipynb$": ">=5"
 ```
 
 # Getting started
@@ -37,4 +49,4 @@ global_ignores:
 - [ ] unit tests from './playground'
 - [x] respecte nested rules
 - [ ] upload full playground (ignore gitignore rules in that directory)
-- [ ] size limits
+- [x] size caps
