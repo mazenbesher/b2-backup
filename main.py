@@ -2,7 +2,7 @@ import re
 import time
 import sys
 from pathlib import Path
-from typing import Iterable, Set, Union, Dict
+from typing import FrozenSet, Iterable, Union, Dict
 
 import typer
 import yaml
@@ -68,7 +68,7 @@ def get_execluded_files(verbose: bool = False) -> ExcludedFiles:
 
     def inner_iterator(
             curr_dir: Path = src_path, 
-            parents_with_gitignores: Set = frozenset([]),
+            parents_with_gitignores: FrozenSet = frozenset([]),
         ):
         paths_in_curr_dir = list(curr_dir.iterdir())
         new_parents_with_gitignores = list(parents_with_gitignores)
@@ -156,7 +156,7 @@ def compute_backup_size(
 
     def inner_iterator(
             curr_dir: Path = src_path, 
-            parents_with_gitignores: Set = frozenset([]),
+            parents_with_gitignores: FrozenSet = frozenset([]),
         ):
         nonlocal size
 
