@@ -36,3 +36,5 @@ global_ignores:
 
 - [ ] unit tests from './playground'
 - [x] respecte nested rules
+- [ ] upload full playground (ignore gitignore rules in that directory)
+- [ ] size limits
