@@ -44,6 +44,11 @@ size_limits:
 4. `vim config.yaml`
 5. `python main.py sync --dry-run --verbose`
 
+# Logging
+
+1. `mkdir logs`
+2. `make sync`
+
 # TODO
 
 - [ ] unit tests from './playground'
