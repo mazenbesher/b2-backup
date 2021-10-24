@@ -3,3 +3,4 @@ gitignore_parser
 typer
 pyyaml
 sortedcontainers
+black

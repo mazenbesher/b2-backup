@@ -73,6 +73,15 @@ size_limits:
 1. `mkdir logs`
 2. `make sync`
 
+# Show excluded files bash function
+
+```bash
+# shortcut to show-excluded-files of b2-backup
+showex(){
+  /path/to/b2-backup/venv/bin/python /path/to/b2-backup/main.py show-excluded-files --start-dir "$1"
+}
+```
+
 # TODO
 
 - [ ] unit tests from './playground'
