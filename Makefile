@@ -4,7 +4,7 @@ sync:
 
 size:
 	. venv/bin/activate; \
-	python main.py compute-backup-size --show-files --show-largest-files 10
+	python main.py compute-backup-size --show-files --show-largest-files 10 --csv-path 'files.csv'
 
 black:
 	. venv/bin/activate; \

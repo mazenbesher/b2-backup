@@ -155,11 +155,9 @@ def get_execluded_files(start_path: Path, verbose: bool = False) -> ExcludedFile
 
 
 @app.command()
-def show_excluded_files(
-    start_dir: Optional[Path] = typer.Option(None)
-):
+def show_excluded_files(start_dir: Optional[Path] = typer.Option(None)):
     if start_dir is None:
-        start_dir : Path = Path(config["src_dir"])
+        start_dir: Path = Path(config["src_dir"])
     list(get_execluded_files(start_dir, verbose=True))
 
 
@@ -216,12 +214,17 @@ def compute_backup_size(
     show_largest_files: int = typer.Option(
         0, help="Number of top largest files to show. 0 to disable."
     ),
+    csv_path: Optional[Path] = typer.Option(None),
 ):
     size: int = 0
     src_path: Path = Path(config["src_dir"])
 
     if show_largest_files > 0:
         sizes_dict: SortedDict = SortedDict()  # key: size, value: path as str
+
+    if csv_path is not None:
+        csv_file = open(csv_path, "w", encoding="utf-8")
+        csv_file.write("path,size,excluded\n")
 
     if show_files:
         print("Included files")
@@ -231,6 +234,8 @@ def compute_backup_size(
             size += curr_file_size
             if show_files:
                 print(f"{curr_file_size / 1e3:,.2f} KB", file.path)
+            if csv_path is not None:
+                csv_file.write(f"\"{file.path}\",{curr_file_size},{file.excluded}\n")
 
             if show_largest_files > 0:
                 must_add = False
@@ -250,6 +255,9 @@ def compute_backup_size(
 
                     if len(sizes_dict) > show_largest_files:
                         sizes_dict.popitem(0)
+
+    if csv_path is not None:
+        csv_file.close()
 
     print(f"{size:>20,} Bytes")
     print(f"{round(size / 1e3):>20,} KB")
