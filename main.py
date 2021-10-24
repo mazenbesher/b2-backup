@@ -181,6 +181,11 @@ def show_excluded_files():
     list(get_execluded_files(verbose=True))
 
 
+
+def flatten(t):
+    return [item for sublist in t for item in sublist]
+
+
 @app.command()
 def compute_backup_size(
     show_files: bool = typer.Option(False),
@@ -192,17 +197,33 @@ def compute_backup_size(
     if show_largest_files > 0:
         sizes_dict: SortedDict = SortedDict()  # key: size, value: path as str
 
+    if show_files:
+        print('Included files')
     for file in dir_iter(src_path):
         if not file.excluded:
-            if show_files:
-                print(file.path)
             curr_file_size = file.path.stat().st_size
             size += curr_file_size
+            if show_files:
+                print(f'{curr_file_size / 1e3:,.2f} KB', file.path)
 
             if show_largest_files > 0:
-                sizes_dict[curr_file_size] = str(file.path)
-                if len(sizes_dict) > show_largest_files:
-                    sizes_dict.popitem()
+                must_add = False
+
+                # make sure sizes_dict is at least fileld with show_largest_files items
+                if len(sizes_dict) < show_largest_files:
+                    must_add = True
+                # is current files size larger than smallest item in sizes_dict?
+                elif curr_file_size > sizes_dict.peekitem(0)[0]:
+                    must_add = True                        
+
+                if must_add:
+                    if not curr_file_size in sizes_dict:
+                        sizes_dict[curr_file_size] = [str(file.path)]
+                    else:
+                        sizes_dict[curr_file_size].append(str(file.path))
+
+                    if len(sizes_dict) > show_largest_files:
+                        sizes_dict.popitem(0)
 
     print(f'{size:>20,} Bytes')
     print(f'{round(size / 1e3):>20,} KB')
@@ -210,10 +231,12 @@ def compute_backup_size(
     print(f'{round(size / 1e9):>20,} GB')
 
     if show_largest_files > 0:
+        print(f'\nLargest {show_largest_files} files:')
         pos_pad = len(str(show_largest_files))
-        path_pad = max(map(len, sizes_dict.values()))
-        for i, (size, path) in enumerate(reversed(list(sizes_dict.items()))):
-            print(f'{i+1:>{pos_pad}}. {path:<{path_pad}} {round(size / 1e6):,} MB')
+        path_pad = max(map(len, flatten(list(sizes_dict.values()))))
+        for i, (size, paths) in enumerate(reversed(list(sizes_dict.items()))):
+            for path in paths:
+                print(f'{i+1:>{pos_pad}}. {path:<{path_pad}} {size / 1e3:,.2f} KB')
 
 
 if __name__ == "__main__":

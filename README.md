@@ -36,6 +36,30 @@ size_limits:
   ".*\\.ipynb$": ">=5"
 ```
 
+## Tested defaults
+
+```yaml
+global_ignores:
+  # caching files
+  - ".*\\.data-\\d\\d\\d\\d-of-\\d\\d\\d\\d$"
+
+  # caching folders
+  - ".*node_modules$"
+  - ".*\\.git$"
+  - ".*\\.ipynb_checkpoints$"
+  - ".*venv$"
+  - ".*__pycache__$"
+
+  # ml-models
+  - ".*LibriSpeech$"
+  - ".*\\.h5$"
+  - ".*\\.pt$"
+
+size_limits:
+  # size in MB
+  ".*\\.ipynb$": ">=5"
+```
+
 # Getting started
 
 1. `python -m venv ./venv`
